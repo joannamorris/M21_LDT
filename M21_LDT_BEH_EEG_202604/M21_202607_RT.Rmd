@@ -1,0 +1,857 @@
+---
+title: "M21 2026 July 2026 Response Time"
+author: "Joanna Morris"
+date: "`r Sys.Date()`"
+output: 
+  bookdown::pdf_document2:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+header-includes:
+  - \setcounter{secnumdepth}{3}
+editor_options: 
+  chunk_output_type: inline
+---
+
+\scriptsize
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      error = FALSE,
+                      comment = "||",
+                      fig.height = 4,
+                      fig.width = 7)
+options(width = 150)
+```
+
+Load libraries
+
+```{r load_libraries, echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(ggeffects)
+library(lme4)
+library(afex)
+library(gridExtra)
+library(MuMIn)
+library(pbkrtest)
+library(effectsize)
+library(performance)
+library(cowplot)  # for use with `plot_grid(x,x,ncol = x)` function
+library(e1071) # for use with `skewness()` function
+library(lmerTest)
+library(emmeans)
+# emm_options(lmer.df = "satterthwaite")
+```
+
+Set emmeans options
+
+```{r emmeans_options}
+emm_options(
+  lmer.df = "kenward-roger",
+  pbkrtest.limit = 10000,
+  disable.pbkrtest = FALSE
+)
+```
+
+Set ggplot parameters
+
+```{r ggplot_parameters}
+# Color palette
+my_palette_1 <- c(
+  "#E31A1C",   # red
+  "#1F78B4"  # blue
+)
+
+my_palette_2 <- c(
+  "Simple"  = "#0072B2",
+  "Complex" = "#E69F00"
+)
+
+my_linetypes_1 <- c(
+  "Simple"  = "dashed",
+  "Complex" = "solid"
+)
+
+# Theme
+my_theme <- theme_classic(base_size = 10) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.box = "horizontal"
+  )
+
+# Common guides
+my_guides <- guides(
+  colour = guide_legend(nrow = 1),
+  fill   = guide_legend(nrow = 1)
+)
+
+```
+
+Define 2-way interaction table function
+
+```{r interaction_table_function.2way, echo=FALSE}
+compact_emm_table <- function(emm_object,
+                              by_var,
+                              condition_prefix = NULL,
+                              digits_est = 2,
+                              digits_df = 1,
+                              digits_p = 3) {
+  
+  by_var_name <- rlang::as_name(rlang::ensym(by_var))
+  
+  emm_df <- summary(emm_object) |>
+    as.data.frame()
+  
+  contrast_df <- pairs(emm_object) |>
+    summary() |>
+    as.data.frame()
+  
+  # Focal factor columns are the EMM columns other than the conditioning variable
+  focal_vars <- setdiff(
+    names(emm_df),
+    c(by_var_name, "emmean", "SE", "df", "lower.CL", "upper.CL")
+  )
+  
+  emm_part <- emm_df |>
+    rowwise() |>
+    mutate(
+      Comparison = paste(c_across(all_of(focal_vars)), collapse = " "),
+      Condition = if (is.null(condition_prefix)) {
+        as.character(.data[[by_var_name]])
+      } else {
+        paste(condition_prefix, "=", .data[[by_var_name]])
+      }
+    ) |>
+    ungroup() |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = emmean,
+      SE,
+      df,
+      lower.CL,
+      upper.CL,
+      t.ratio = NA_real_,
+      p.value = NA_real_
+    )
+  
+  contrast_part <- contrast_df |>
+    mutate(
+      Comparison = contrast,
+      Condition = if (is.null(condition_prefix)) {
+        as.character(.data[[by_var_name]])
+      } else {
+        paste(condition_prefix, "=", .data[[by_var_name]])
+      }
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL = NA_real_,
+      upper.CL = NA_real_,
+      t.ratio,
+      p.value
+    )
+  
+  bind_rows(emm_part, contrast_part) |>
+    arrange(Condition, Comparison) |>
+    mutate(
+      Estimate = round(Estimate, digits_est),
+      SE       = round(SE, digits_est),
+      df       = round(df, digits_df),
+      lower.CL = round(lower.CL, digits_est),
+      upper.CL = round(upper.CL, digits_est),
+      t.ratio  = round(t.ratio, digits_est),
+      p.value  = round(p.value, digits_p)
+    )
+}
+```
+
+```{r interaction_table_function.3way, echo=FALSE}
+compact_3way_table <- function(emm_object,
+                               by_var,
+                               condition_prefix = NULL,
+                               factor1,
+                               factor2,
+                               digits_est = 2,
+                               digits_df = 1,
+                               digits_p = 3) {
+  
+  by_var_name <- rlang::as_name(rlang::ensym(by_var))
+  factor1_name <- rlang::as_name(rlang::ensym(factor1))
+  factor2_name <- rlang::as_name(rlang::ensym(factor2))
+  
+  emm_df <- summary(emm_object) |>
+    as.data.frame()
+  
+  make_condition <- function(x) {
+    if (is.null(condition_prefix)) {
+      as.character(x[[by_var_name]])
+    } else {
+      paste(condition_prefix, "=", x[[by_var_name]])
+    }
+  }
+  
+  emm_part <- emm_df |>
+    mutate(
+      Comparison = paste(.data[[factor1_name]], .data[[factor2_name]]),
+      Condition = make_condition(cur_data())
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = emmean,
+      SE,
+      df,
+      lower.CL,
+      upper.CL,
+      t.ratio = NA_real_,
+      p.value = NA_real_
+    )
+  
+  factor1_part <- pairs(emm_object, simple = factor1_name) |>
+    summary() |>
+    as.data.frame() |>
+    mutate(
+      Comparison = contrast,
+      Condition = paste(
+        if (is.null(condition_prefix)) .data[[by_var_name]] else paste(condition_prefix, "=", .data[[by_var_name]]),
+        "|",
+        factor2_name, "=",
+        .data[[factor2_name]]
+      )
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL = NA_real_,
+      upper.CL = NA_real_,
+      t.ratio,
+      p.value
+    )
+  
+  factor2_part <- pairs(emm_object, simple = factor2_name) |>
+    summary() |>
+    as.data.frame() |>
+    mutate(
+      Comparison = contrast,
+      Condition = paste(
+        if (is.null(condition_prefix)) .data[[by_var_name]] else paste(condition_prefix, "=", .data[[by_var_name]]),
+        "|",
+        factor1_name, "=",
+        .data[[factor1_name]]
+      )
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL = NA_real_,
+      upper.CL = NA_real_,
+      t.ratio,
+      p.value
+    )
+  
+  interaction_part <- contrast(
+  emm_object,
+  interaction = c("pairwise", "pairwise")
+) |>
+  summary() |>
+  as.data.frame() |>
+  mutate(
+    Comparison = paste0(
+      "Int: ",
+      .data[[paste0(factor1_name, "_pairwise")]],
+      " across ",
+      .data[[paste0(factor2_name, "_pairwise")]]
+    ),
+    Condition = make_condition(cur_data())
+  ) |>
+  transmute(
+    Comparison,
+    Condition,
+    Estimate = estimate,
+    SE,
+    df,
+    lower.CL = NA_real_,
+    upper.CL = NA_real_,
+    t.ratio,
+    p.value
+  )
+  
+  bind_rows(
+    emm_part         |> mutate(RowType = 1),
+    factor1_part     |> mutate(RowType = 2),
+    factor2_part     |> mutate(RowType = 2),
+    interaction_part |> mutate(RowType = 3)
+  ) |>
+    arrange(Condition, RowType, Comparison) |>
+    mutate(
+      Estimate = round(Estimate, digits_est),
+      SE       = round(SE, digits_est),
+      df       = round(df, digits_df),
+      lower.CL = round(lower.CL, digits_est),
+      upper.CL = round(upper.CL, digits_est),
+      t.ratio  = round(t.ratio, digits_est),
+      p.value  = round(p.value, digits_p)
+    ) |>
+    select(-RowType)
+}
+```
+
+
+# Load Files
+
+```{r load_files, message=FALSE, warning=FALSE}
+
+# Load data: rt words
+
+rt_w <- read_csv("rt_words_frq.csv") |>
+  filter(correct == 1) |>
+  mutate(
+    SubjID = factor(SubjID),
+    Item   = factor(target),
+    logRT  = log(response_time),
+    OS     = as.numeric(Dim.2),
+    LP     = as.numeric(Dim.1),
+    zLogBF = as.numeric(scale(LogBF)),
+    zLogFS = as.numeric(scale(LogFS))
+  )
+
+# Load data: rt nonwords
+rt_nw <- read_csv("rt_nwords_frq.csv") |>
+  filter(correct == 1) |>
+  mutate(
+    SubjID = factor(SubjID),
+    ItemID = factor(ItemID),
+    complexity = factor(complexity,
+                    levels = c("SIMP", "COMP"),
+                    labels = c("Simple", "Complex")),
+    logRT  = log(response_time),
+    OS     = as.numeric(Dim.2),
+    LP     = as.numeric(Dim.1),
+    zLogBF = as.numeric(scale(LogBF)),
+    zLogFS = as.numeric(scale(LogFS))
+  )
+
+# Load data: erp_fs words
+erp_fs_w <- read_csv("erp_fs_dmg_words.csv") |>
+  mutate(
+    SubjID = factor(SubjID),
+    chlabel = factor(chlabel),
+    family_size = factor(family_size, 
+                         levels = c("Small", "Large")),
+    time_window = factor(time_window),
+    OS = as.numeric(Dim.2),
+    LP = as.numeric(Dim.1)
+  )
+
+# Load data: erp_fs nonwords
+erp_fs_nw <- read_csv("erp_fs_dmg_nonwords.csv") |>
+  mutate(
+    SubjID = factor(SubjID),
+    chlabel = factor(chlabel),
+    family_size = factor(family_size, 
+                         levels = c("Small", "Large")),
+    complexity = factor(complexity,
+                    labels = c("Simple", "Complex")),
+    time_window = factor(time_window),
+    OS = as.numeric(Dim.2),
+    LP = as.numeric(Dim.1)
+  )
+
+# Load data: erp_bf words
+erp_bf_w <- read_csv("erp_bf_dmg_words.csv") |>
+  mutate(
+    SubjID = factor(SubjID),
+    chlabel = factor(chlabel),
+    base_frequency = factor(base_frequency, 
+                            levels = c("Low", "High")),
+    time_window = factor(time_window),
+    OS = as.numeric(Dim.2),
+    LP = as.numeric(Dim.1)
+  )
+
+# Load data: erp_bf nonwords
+erp_bf_nw <- read_csv("erp_bf_dmg_nonwords.csv") |>
+  mutate(
+    SubjID = factor(SubjID),
+    chlabel = factor(chlabel),
+    base_frequency = factor(base_frequency, 
+                            levels = c("Low", "High")),
+    complexity = factor(complexity,
+                    labels = c("Simple", "Complex")),
+    time_window = factor(time_window),
+    OS = as.numeric(Dim.2),
+    LP = as.numeric(Dim.1)
+  )
+```
+
+
+
+```{r}
+range(erp_fs_nw$LP)
+range(erp_fs_nw$OS)
+```
+
+# RESPONSE TIME WORD DATA
+## Word Model
+
+```{r anova_rt_words}
+
+library(lmerTest)
+
+m_rt_words <-lmer(
+  logRT ~ zLogBF + zLogFS + OS + LP +
+    (1 | SubjID) +
+    (1 | Item),
+  data = rt_w,
+  control = lmerControl(optimizer = "bobyqa")
+)
+summary(m_rt_words)
+
+# Effect sizes for individual terms
+eta_squared(m_rt_words, partial = TRUE)
+
+# Model R²
+r2_nakagawa(m_rt_words)
+```
+
+
+```{r echo=FALSE}
+library(ggeffects)
+library(ggplot2)
+library(patchwork)
+
+plot_model_effect <- function(model, predictor, x_label) {
+
+  pred <- ggpredict(
+    model,
+    terms = paste0(predictor, " [all]")
+  ) |>
+    as.data.frame()
+
+  ggplot(
+    pred,
+    aes(
+      x = x,
+      y = exp(predicted)
+    )
+  ) +
+    geom_ribbon(
+      aes(
+        ymin = exp(conf.low),
+        ymax = exp(conf.high),
+      ),
+      fill = my_palette_2[1],
+      alpha = 0.20,
+      colour = NA
+    ) +
+    geom_line(linewidth = 1.1,
+              colour = "#0072B2",
+              linetype = my_linetypes_1[1]) +
+    labs(
+      x = x_label,
+      y = "Predicted reaction time (ms)"
+    ) +
+#    theme_classic(base_size = 12) +
+  scale_colour_manual(values = my_palette_2) +
+  scale_fill_manual(values = my_palette_2) +
+  my_theme +
+  my_guides
+}
+```
+
+
+```{r echo=FALSE, fig.height=7, fig.width=6}
+BF_plot <- plot_model_effect(
+  m_rt_words,
+  predictor = "zLogBF",
+  x_label = "Base Frequency (standardized log)"
+)
+
+FS_plot <- plot_model_effect(
+  m_rt_words,
+  predictor = "zLogFS",
+  x_label = "Family Size (standardized log)"
+)
+
+OS_plot <- plot_model_effect(
+  m_rt_words,
+  predictor = "OS",
+  x_label = "Orthographic Sensitivity"
+)
+
+LP_plot <- plot_model_effect(
+  m_rt_words,
+  predictor = "LP",
+  x_label = "Lexical Proficiency"
+)
+
+(BF_plot | FS_plot) /
+  (OS_plot | LP_plot) +
+  plot_annotation(
+    title = "Adjusted Effects on Reaction Time"
+  )
+```
+* Higher base frequency predicts faster RTs, $b=-0.0172$, $p<.001$.
+* Larger family size predicts faster RTs, $b=-0.0129$, $p=.010$.
+* Higher orthographic sensitivity is associated with faster RTs, but the effect does not reach the conventional significance threshold, ($p=.069$).
+* Lexical proficiency has little apparent relationship with RT in this model, ($p=.353$).
+
+
+# RESPONSE TIME NONWORD DATA
+## Model
+```{r anova_rt_nonwords}
+contrasts(rt_nw$complexity) <- c(-0.5, 0.5)
+
+m_rt_nw <- lmer(
+  logRT ~ complexity + zLogBF + zLogFS + OS + LP +
+    (1 + complexity | SubjID) +
+    (1 | ItemID),
+  data = rt_nw,
+  control = lmerControl(optimizer = "bobyqa")
+)
+m_rt_nw
+summary(m_rt_nw)
+
+# Effect sizes for individual terms
+eta_squared(m_rt_nw, partial = TRUE)
+
+# Model R²
+r2_nakagawa(m_rt_nw)
+
+# Means
+# get means on log scale
+emm_logrt <- emmeans(m_rt_nw, ~ complexity)
+emm_summary <- summary(emm_logrt)
+
+# back transform manually
+emm_summary$mean_ms <- exp(emm_summary$emmean)
+emm_summary$lower_ms <- exp(emm_summary$lower.CL)
+emm_summary$upper_ms <- exp(emm_summary$upper.CL)
+emm_summary
+
+diff_ms <- exp(emm_summary$emmean[emm_summary$complexity == "Complex"]) -
+            exp(emm_summary$emmean[emm_summary$complexity == "Simple"])
+diff_ms
+```
+
+
+For this model, use one adjusted-means plot for the categorical predictor `complexity` and four adjusted-effect plots for the continuous predictors. Because there are no interactions, the continuous-predictor slopes do not vary by complexity on the model’s log-RT scale.
+
+
+```{r echo=FALSE}
+library(ggeffects)
+library(ggplot2)
+library(patchwork)
+
+plot_continuous_effect <- function(model, predictor, x_label) {
+
+  pred <- ggpredict(
+    model,
+    terms = c(
+      paste0(predictor, " [all]"),
+      "complexity"
+    )
+  ) |>
+    as.data.frame()
+
+  ggplot(
+    pred,
+    aes(
+      x = x,
+      y = exp(predicted),
+      colour = group,
+      fill = group,
+      linetype = group
+    )
+  ) +
+    geom_ribbon(
+      aes(
+        ymin = exp(conf.low),
+        ymax = exp(conf.high)
+      ),
+      alpha = 0.18,
+      colour = NA
+    ) +
+    geom_line(linewidth = 1.1) +
+    scale_colour_manual(
+      values = my_palette_2,
+      name = "Complexity"
+    ) +
+    scale_fill_manual(
+      values = my_palette_2,
+      name = "Complexity"
+    ) +
+    scale_linetype_manual(
+      values = my_linetypes_1,
+      name = "Complexity"
+    ) +
+    labs(
+      x = x_label,
+      y = "Predicted reaction time (ms)"
+    ) +
+    theme_classic(base_size = 12) +
+    theme(
+      legend.position = "bottom"
+    )
+}
+```
+
+
+```{r echo=FALSE}
+#Create the complexity plot:
+complexity_pred <- ggpredict(
+  m_rt_nw,
+  terms = "complexity"
+) |>
+  as.data.frame()
+
+complexity_plot <- ggplot(
+  complexity_pred,
+  aes(
+    x = x,
+    y = exp(predicted),
+    colour = x
+  )
+) +
+  geom_point(size = 3.5) +
+  geom_errorbar(
+    aes(
+      ymin = exp(conf.low),
+      ymax = exp(conf.high)
+    ),
+    width = 0.10,
+    linewidth = 0.9
+  ) +
+  scale_colour_manual(
+    values = my_palette_2,
+    name = "Complexity"
+  ) +
+  labs(
+    x = "Complexity",
+    y = "Predicted reaction time (ms)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "none"
+  )
+```
+
+
+```{r echo=FALSE}
+# Create the four continuous-predictor plots:
+BF_plot <- plot_model_effect(
+  m_rt_nw,
+  predictor = "zLogBF",
+  x_label = "Base Frequency (standardized log)"
+)
+
+FS_plot <- plot_model_effect(
+  m_rt_nw,
+  predictor = "zLogFS",
+  x_label = "Family Size (standardized log)"
+)
+
+OS_plot <- plot_model_effect(
+  m_rt_nw,
+  predictor = "OS",
+  x_label = "Orthographic Sensitivity"
+)
+
+LP_plot <- plot_model_effect(
+  m_rt_nw,
+  predictor = "LP",
+  x_label = "Lexical Proficiency"
+)
+```
+
+Then combine them:
+
+```{r include=FALSE}
+
+complexity_plot |
+  (BF_plot | FS_plot) /
+  (OS_plot | LP_plot) +
+  plot_layout(widths = c(0.75, 2)) +
+  plot_annotation(
+    title = "Adjusted Effects on Nonword Reaction Time"
+  )
+
+(complexity_plot | BF_plot | FS_plot) /
+  (OS_plot | LP_plot | plot_spacer()) +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    title = "Adjusted Effects on Nonword Reaction Time"
+  ) &
+  theme(
+    legend.position = "bottom"
+  )
+```
+
+```{r fig.height=9}
+# row1 <- plot_grid( BF_plot,  FS_plot, OS_plot, LP_plot, ncol = 2)
+
+
+row1 <- plot_grid(
+  BF_plot,
+  FS_plot,
+  ncol = 2,
+  align = "hv"
+)
+
+row2 <- plot_grid(
+  OS_plot,
+  LP_plot,
+  ncol = 2,
+  align = "hv"
+)
+
+plot_grid(
+  ggdraw() + draw_label("Nonword RT Data", fontface = "bold"),
+  complexity_plot,
+  row1,
+  row2,
+  ncol = 1,
+  rel_heights = c(0.10, 1, 1, 1)
+)
+```
+
+
+* Complex nonwords are substantially slower than simple nonwords.
+* Higher base frequency predicts slower nonword responses.
+* Family size has a small, nonsignificant negative relationship with RT.
+* Higher orthographic sensitivity predicts faster responses.
+* Lexical proficiency has essentially no adjusted relationship with RT.
+
+
+# EXPLORATORY ANALYSIS
+
+The original nonword RT model was specified without Complexity × LP or Complexity × OS interactions by design — the RT models were confirmatory and included individual differences as main effects only, reflecting the theoretical decision that RT models were specified for efficiency rather than morphological architecture.
+When asignificant Complexity × OS interaction in the exploratory symmetric N400 model was discovered, it was decided to run an exploratory nonword RT model that included both Complexity × OS and Complexity × LP interactions, to check whether the neural patterns had any behavioral counterpart. 
+
+```{r}
+m_rt_nw_os_lp <- lmer(
+  logRT ~ complexity * OS + complexity * LP + zLogBF + zLogFS +
+    (1 + complexity | SubjID) + (1 | ItemID),
+  data = rt_nw,
+  control = lmerControl(optimizer = "bobyqa")
+)
+summary(m_rt_nw_os_lp)
+```
+
+## Means and Contrasts
+
+```{r}
+emm_options(lmer.df = "satterthwaite")
+emmeans(m_rt_nw_os_lp, pairwise ~ complexity | LP,
+        at = list(LP = c(-2.5, -1, 0, 1, 3)),
+        tran = "log")
+```
+
+```{r}
+## complexity x OS
+emm_rt_nw_os_lp <- emmeans(m_rt_nw_os_lp,
+                      ~ complexity | LP,
+                      at = list(LP = c(-2.5, -1, 0, 1, 3.0)))
+
+emm_part <- summary(emm_rt_nw_os_lp) |>
+  as.data.frame() |>
+  transmute(LP, Effect = paste("EMM:", complexity), Estimate = emmean, SE, df, 
+            lower.CL, upper.CL, t.ratio = NA_real_, p.value = NA_real_)
+
+contrast_part <- pairs(emm_rt_nw_os_lp) |>
+  summary() |>
+  as.data.frame() |>
+  transmute(LP, Effect = paste("Contrast:", contrast), Estimate = estimate, SE, df,
+            lower.CL = NA_real_, upper.CL = NA_real_, t.ratio, p.value)
+
+emm_contrast_table_rt_nw_os_lp <- bind_rows(emm_part, contrast_part) |>
+  arrange(LP, Effect)|>
+  mutate(
+    Estimate = round(Estimate, 2),
+    SE       = round(SE, 2),
+    df       = round(df, 1),
+    lower.CL = round(lower.CL, 2),
+    upper.CL = round(upper.CL, 2),
+    t.ratio  = round(t.ratio, 2),
+    p.value  = round(p.value, 3)
+  )
+# Force RStudio to show more rows inline by using the as.tibble() function
+as_tibble(emm_contrast_table_rt_nw_os_lp) |> print(n = 50)
+
+```
+
+## Plots
+
+
+```{r echo=FALSE}
+# Create the four continuous-predictor plots:
+BF_plot_exp <- plot_continuous_effect(
+  m_rt_nw_os_lp,
+  predictor = "zLogBF",
+  x_label = "Base Frequency (standardized log)"
+)
+
+FS_plot_exp <- plot_continuous_effect(
+  m_rt_nw_os_lp,
+  predictor = "zLogFS",
+  x_label = "Family Size (standardized log)"
+)
+
+OS_plot_exp <- plot_continuous_effect(
+  m_rt_nw_os_lp,
+  predictor = "OS",
+  x_label = "Orthographic Sensitivity"
+)
+
+LP_plot_exp <- plot_continuous_effect(
+  m_rt_nw_os_lp,
+  predictor = "LP",
+  x_label = "Lexical Proficiency"
+)
+```
+
+
+
+```{r fig.height=9}
+# row1 <- plot_grid( BF_plot,  FS_plot, OS_plot, LP_plot, ncol = 2)
+
+
+row1 <- plot_grid(
+  BF_plot_exp,
+  FS_plot_exp,
+  ncol = 2,
+  align = "hv"
+)
+
+row2 <- plot_grid(
+  OS_plot_exp,
+  LP_plot_exp,
+  ncol = 2,
+  align = "hv"
+)
+
+plot_grid(
+  ggdraw() + draw_label("Nonword RT Data", fontface = "bold"),
+  complexity_plot,
+  row1,
+  row2,
+  ncol = 1,
+  rel_heights = c(0.10, 1, 1, 1)
+)
+```
+
+
