@@ -10,7 +10,7 @@ output:
 header-includes:
   - \setcounter{secnumdepth}{3}
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 \scriptsize
@@ -510,6 +510,110 @@ LP_plot <- plot_model_effect(
 * Higher orthographic sensitivity is associated with faster RTs, but the effect does not reach the conventional significance threshold, ($p=.069$).
 * Lexical proficiency has little apparent relationship with RT in this model, ($p=.353$).
 
+---
+To compare the relative effects of the four continuous predictors, plot their model coefficients and 95% confidence intervals. Because your outcome is `logRT`, it is useful to transform each coefficient into the percentage change in reaction time associated with a one-unit increase in the predictor.
+
+If all four predictors are standardized, that becomes the percentage change associated with a one-standard-deviation increase.
+
+```{r}
+library(broom.mixed)
+library(forcats)
+
+coef_plot_data <- tidy(
+  m_rt_words,
+  effects = "fixed",
+  conf.int = TRUE,
+  conf.level = 0.95
+) |>
+  filter(term %in% c("zLogBF", "zLogFS", "OS", "LP")) |>
+  mutate(
+    Predictor = recode(
+      term,
+      zLogBF = "Base Frequency",
+      zLogFS = "Family Size",
+      OS     = "Orthographic Sensitivity",
+      LP     = "Lexical Proficiency"
+    ),
+
+    # Convert log-RT coefficients to percentage change in RT
+    percent_change = 100 * (exp(estimate) - 1),
+    conf.low_pct   = 100 * (exp(conf.low) - 1),
+    conf.high_pct  = 100 * (exp(conf.high) - 1),
+
+    Predictor = fct_reorder(Predictor, percent_change)
+  )
+```
+
+Then plot the coefficients:
+
+```{r}
+ggplot(
+  coef_plot_data,
+  aes(
+    x = percent_change,
+    y = Predictor
+  )
+) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    colour = "grey50"
+  ) +
+  geom_errorbar(
+    aes(
+      xmin = conf.low_pct,
+      xmax = conf.high_pct
+    ),
+    width = 0.15,
+    linewidth = 0.8,
+    colour = "#0072B2"
+  ) +
+  geom_point(
+    size = 3,
+    colour = "#0072B2"
+  ) +
+  labs(
+    x = "Percentage change in predicted reaction time",
+    y = NULL,
+    title = "Adjusted Effects on Reaction Time"
+  ) +
+  my_theme
+```
+
+Interpretation:
+
+* Values above zero indicate slower reaction times as the predictor increases.
+* Values below zero indicate faster reaction times.
+* A confidence interval crossing zero indicates that the coefficient is not clearly different from zero.
+* The farther the estimate is from zero, the larger the adjusted effect, provided the predictors are on the same standardized scale.
+
+For example, a value of `-4` means that a one-unit increase in the predictor is associated with approximately a 4% reduction in predicted RT, holding the other variables constant.
+
+<!-- If `OS` and `LP` are not standardized, standardize them before fitting the model: -->
+
+```{r}
+# rt_nw <- rt_nw |>
+#   mutate(
+#     zOS = as.numeric(scale(OS)),
+#     zLP = as.numeric(scale(LP))
+#   )
+# ```
+# 
+# Then refit using `zOS` and `zLP`:
+# 
+# ```{r}
+# m_rt_words_standardized <- lmer(
+#   logRT ~ complexity + zLogBF + zLogFS + zOS + zLP +
+#     (1 + complexity | SubjID) +
+#     (1 | ItemID),
+#   data = rt_nw
+# )
+```
+
+
+
+
+---
 
 # RESPONSE TIME NONWORD DATA
 ## Model
@@ -736,6 +840,77 @@ plot_grid(
 * Higher orthographic sensitivity predicts faster responses.
 * Lexical proficiency has essentially no adjusted relationship with RT.
 
+---
+```{r}
+library(broom.mixed)
+library(forcats)
+
+coef_plot_data_nw <- tidy(
+  m_rt_nw,
+  effects = "fixed",
+  conf.int = TRUE,
+  conf.level = 0.95
+) |>
+  filter(term %in% c("zLogBF", "zLogFS", "OS", "LP")) |>
+  mutate(
+    Predictor = recode(
+      term,
+      zLogBF = "Base Frequency",
+      zLogFS = "Family Size",
+      OS     = "Orthographic Sensitivity",
+      LP     = "Lexical Proficiency"
+    ),
+
+    # Convert log-RT coefficients to percentage change in RT
+    percent_change = 100 * (exp(estimate) - 1),
+    conf.low_pct   = 100 * (exp(conf.low) - 1),
+    conf.high_pct  = 100 * (exp(conf.high) - 1),
+
+    Predictor = fct_reorder(Predictor, percent_change)
+  )
+```
+
+Then plot the coefficients:
+
+```{r}
+nw_coef_plot <-ggplot(
+  coef_plot_data_nw,
+  aes(
+    x = percent_change,
+    y = Predictor
+  )
+) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    colour = "grey50"
+  ) +
+  geom_errorbar(
+    aes(
+      xmin = conf.low_pct,
+      xmax = conf.high_pct
+    ),
+    width = 0.15,
+    linewidth = 0.8,
+    colour = "#0072B2"
+  ) +
+  geom_point(
+    size = 3,
+    colour = "#0072B2"
+  ) +
+  labs(
+    x = "Percentage change in predicted reaction time",
+    y = NULL,
+    title = "Adjusted Effects on Reaction Time"
+  ) +
+  my_theme
+```
+
+```{r}
+plot_grid(complexity_plot, nw_coef_plot, ncol = 2, rel_widths = c(1,2))
+```
+
+---
 
 # EXPLORATORY ANALYSIS
 

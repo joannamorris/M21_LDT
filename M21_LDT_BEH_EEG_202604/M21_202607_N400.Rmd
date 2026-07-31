@@ -202,20 +202,6 @@ compact_emm_table <- function(emm_object,
 ```
 
 
-```{r}
-emm_contrast_table_fs_LP <- bind_rows(emm_part, contrast_part) |>
-  arrange(LP, Effect)|>
-  mutate(
-    Estimate = round(Estimate, 2),
-    SE       = round(SE, 2),
-    df       = round(df, 1),
-    lower.CL = round(lower.CL, 2),
-    upper.CL = round(upper.CL, 2),
-    t.ratio  = round(t.ratio, 2),
-    p.value  = round(p.value, 3)
-  )
-```
-
 For 3-way use this function like this:
 
 ```
