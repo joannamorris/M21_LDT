@@ -42,6 +42,8 @@ library(cowplot)  # for use with `plot_grid(x,x,ncol = x)` function
 library(e1071) # for use with `skewness()` function
 library(lmerTest)
 library(emmeans)
+library(broom.mixed)
+library(forcats)
 # emm_options(lmer.df = "satterthwaite")
 ```
 
@@ -496,7 +498,7 @@ OS_plot <- plot_model_effect(
 LP_plot <- plot_model_effect(
   m_rt_words,
   predictor = "LP",
-  x_label = "Lexical Proficiency"
+  x_label = "Language Proficiency"
 )
 
 (BF_plot | FS_plot) /
@@ -532,7 +534,7 @@ coef_plot_data <- tidy(
       zLogBF = "Base Frequency",
       zLogFS = "Family Size",
       OS     = "Orthographic Sensitivity",
-      LP     = "Lexical Proficiency"
+      LP     = "Language Proficiency"
     ),
 
     # Convert log-RT coefficients to percentage change in RT
@@ -778,7 +780,7 @@ OS_plot <- plot_model_effect(
 LP_plot <- plot_model_effect(
   m_rt_nw,
   predictor = "LP",
-  x_label = "Lexical Proficiency"
+  x_label = "Language Proficiency"
 )
 ```
 
@@ -858,7 +860,7 @@ coef_plot_data_nw <- tidy(
       zLogBF = "Base Frequency",
       zLogFS = "Family Size",
       OS     = "Orthographic Sensitivity",
-      LP     = "Lexical Proficiency"
+      LP     = "Language Proficiency"
     ),
 
     # Convert log-RT coefficients to percentage change in RT
@@ -995,7 +997,7 @@ OS_plot_exp <- plot_continuous_effect(
 LP_plot_exp <- plot_continuous_effect(
   m_rt_nw_os_lp,
   predictor = "LP",
-  x_label = "Lexical Proficiency"
+  x_label = "Language Proficiency"
 )
 ```
 

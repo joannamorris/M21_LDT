@@ -10,7 +10,7 @@ output:
 header-includes:
   - \setcounter{secnumdepth}{3}
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 \scriptsize
@@ -486,7 +486,7 @@ library(ggplot2)
            color = group,
            fill = group,
            linetype = group)) +
-  geom_line(size = 1.2) +
+  geom_line(size = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = 0.2,
@@ -495,16 +495,20 @@ library(ggplot2)
   labs(
     x = "Orthographic Sensitivity (OS)",
     y = "Predicted N250 amplitude (µV)",
-    title = "Interaction Not Significant",
+    title = expression(
+      beta == -0.111 * "," ~
+      plain(SE) == 0.065 * "," ~
+      italic(t)(1618) == -1.70 * "," ~
+      italic(p) < .089),
     color = "Family Size",
     fill = "Family Size",
-    linetype = "Family Size"
-  ) +
+    linetype = "Family Size") +
   scale_colour_manual(values = my_palette_2) +
   scale_fill_manual(values = my_palette_2) +
   scale_linetype_manual(values = my_linetypes_1) +
   my_theme +
   my_guides)
+
 ```
 
 ## N250 WORD DATA: BASE FREQUENCY as Fixed Effect
@@ -591,7 +595,7 @@ library(ggplot2)
            color = group,
            fill = group,
            linetype = group)) +
-  geom_line(size = 1.2) +
+  geom_line(size = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = 0.2,
@@ -599,6 +603,12 @@ library(ggplot2)
   labs(
     x = "Orthographic Sensitivity (OS)",
     y = "Predicted N250 amplitude (µV)",
+    title = expression(
+      beta == -0.455 * "," ~
+      plain(SE) == 0.112 * "," ~
+      italic(t)(1618) == -4.06 * "," ~
+      italic(p) < .001 * "," ~
+      eta[p]^2 == .010),
     color = "Base Frequency",
     fill = "Base Frequency",
     linetype = "Base Frequency"
@@ -613,6 +623,9 @@ library(ggplot2)
 
 
 ## N250 WORD DATA: Combined Plots
+
+
+
 
 ```{r echo=FALSE, fig.height=3, fig.width=5}
 row1 <- plot_grid(BFxOS_n250,FSxOS_n250,ncol = 2)
@@ -632,7 +645,7 @@ plot_grid(
 m_w_N250_bf_LP <- lmer(
   value ~ base_frequency * LP + OS +
     (1 | SubjID) + (1 | SubjID:chlabel),
-  data = subset(erp_bf_w, time_window == "N400"),
+  data = subset(erp_bf_w, time_window == "N250"),
   control = lmerControl(optimizer = "bobyqa")
 )
 summary(m_w_N250_bf_LP)
@@ -644,7 +657,7 @@ summary(m_w_N250_bf_LP)
 m_w_N250_fs_LP <- lmer(
   value ~ family_size * LP + OS +
     (1 | SubjID) + (1 | SubjID:chlabel),
-  data = subset(erp_fs_w, time_window == "N400"),
+  data = subset(erp_fs_w, time_window == "N250"),
   control = lmerControl(optimizer = "bobyqa")
 )
 summary(m_w_N250_fs_LP)
@@ -774,7 +787,7 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
            color = group,
            fill = group,
            linetype = group)) +
-  geom_line(size = 1.2) +
+  geom_line(size = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = 0.2,
@@ -782,6 +795,12 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
   labs(
     x = "Orthographic Sensitivity (OS)",
     y = "Predicted N250 amplitude (µV)",
+    title = expression(
+      beta == 0.392 * "," ~
+      plain(SE) == 0.056 * "," ~
+      italic(t)(4856) == 6.98 * "," ~
+      italic(p) < .001 * "," ~
+      eta[p]^2 == .010),
     color = "Complexity",
     fill = "Complexity",
     linetype = "Complexity"
@@ -811,7 +830,7 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
            color = group,
            fill = group,
            linetype = group)) +
-  geom_line(size = 1.2) +
+  geom_line(size = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = 0.2,
@@ -819,6 +838,12 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
   labs(
     x = "Language Proficiency (LP)",
     y = "Predicted N250 amplitude (µV)",
+    title = expression(
+      beta == 0.358 * "," ~
+      plain(SE) == 0.041 * "," ~
+      italic(t)(4856) == 8.76 * "," ~
+      italic(p) < .001 * "," ~
+      eta[p]^2 == .016),
     color = "Complexity",
     fill = "Complexity",
     linetype = "Complexity"

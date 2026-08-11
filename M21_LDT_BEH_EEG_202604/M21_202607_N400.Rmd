@@ -547,7 +547,13 @@ as.tibble(emm_contrast_table_LP_N400_words, digits = 3) |> print(n=20)
     y = "Predicted N400 amplitude (µV)",
     color = "Base Frequency",
     fill = "Base Frequency",
-    linetype = "Base Frequency"
+    linetype = "Base Frequency",
+    title = expression(
+      beta ==  0.344 * "," ~
+      plain(SE) == 0.087 * "," ~
+      italic(t)(1618) == 3.98 * "," ~
+      italic(p) < .001 * "," ~
+      eta[p]^2 == .010),
   )  +
   scale_colour_manual(values = my_palette_2) +
   scale_fill_manual(values = my_palette_2) +
@@ -617,7 +623,11 @@ as.tibble(emmeans(m_w_N400_fs, ~ family_size)) |> print()
   labs(
     x = "Language Proficiency (LP)",
     y = "Predicted N400 amplitude (µV)",
-    title = "Interaction Not Significant",
+    title = expression(
+      beta == -0.071 * "," ~
+      plain(SE) == 0.052 * "," ~
+      italic(t)(1618) == -1.37 * "," ~
+      italic(p) < .172),
     color = "Family Size",
     fill = "Family Size",
     linetype = "Family Size"
@@ -833,6 +843,8 @@ familysizexcomplexity_plot <- ggplot(
   my_guides +
   scale_colour_manual(values = my_palette_2) +
   scale_fill_manual(values = my_palette_2)
+
+
 ```
 
 #### Complexity × LP interaction averaged over Family Size:
@@ -869,9 +881,10 @@ complexityxLP_plot.a <- ggplot(
   geom_point(size = 2) +
   labs( x = "Lexical Proficiency (LP)",
         y = "Estimated mean amplitude (µV)",
-        title = "Complexity x LP Interaction",
+        title = " Complexity × LP interaction (averaged over Family Size)",
         colour = "Complexity",
         linetype = "Complexity") +
+  theme(plot.title = element_text(hjust = 0.5))  + 
   my_theme +
   my_guides +
   scale_colour_manual(values = my_palette_2) +
@@ -1143,7 +1156,7 @@ nw.n400.3way.A <- ggplot(pred,
            colour = group,
            fill = group,
            linetype = group)) +
-  geom_line(linewidth = 1.2) +
+  geom_line(linewidth = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = .20,
@@ -1155,11 +1168,18 @@ nw.n400.3way.A <- ggplot(pred,
   labs(
     x = "Lexical Proficiency (LP)",
     y = "Predicted N400 amplitude (µV)",
+    title = expression(
+      beta == 0.229 * "," ~
+      plain(SE) == 0.100 * "," ~
+      italic(t)(4851) == 2.29 * "," ~
+      italic(p) < .022 * "," ~
+      eta[p]^2 == .001),
     colour = "Complexity",
     fill = "Complexity",
     linetype = "Complexity"
   ) +
-  my_theme +
+my_theme +
+ theme(plot.title = element_text(hjust = 0.5)) +
   my_guides
 
 # Facet by Complexity
@@ -1174,7 +1194,7 @@ nw.n400.3way.B <- ggplot(pred,
            colour = group,
            fill = group,
            linetype = group)) +
-  geom_line(linewidth = 1.2) +
+  geom_line(linewidth = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = .20,
@@ -1187,11 +1207,18 @@ nw.n400.3way.B <- ggplot(pred,
   labs(
     x = "Lexical Proficiency (LP)",
     y = "Predicted N400 amplitude (µV)",
+    title = expression(
+      beta == 0.229 * "," ~
+      plain(SE) == 0.100 * "," ~
+      italic(t)(4851) == 2.29 * "," ~
+      italic(p) < .022 * "," ~
+      eta[p]^2 == .001),
     colour = "Family Size",
     fill = "Family Size",
     linetype = "Family Size"
   ) +
   my_theme +
+  theme(plot.title = element_text(hjust = 0.5)) + 
   my_guides
 
 ```
@@ -1246,7 +1273,7 @@ complexity_by_LP <- ggplot(
   geom_hline(yintercept = 0,
              linetype = "dashed",
              linewidth = 0.5) +
-  geom_line(linewidth = 1.2) +
+  geom_line(linewidth = 1.5) +
   geom_ribbon(aes(ymin = lower.CL,
                   ymax = upper.CL),
               alpha = 0.20,
@@ -1316,7 +1343,7 @@ familysize_by_LP <- ggplot(
   geom_hline(yintercept = 0,
              linetype = "dashed",
              linewidth = 0.5) +
-  geom_line(linewidth = 1.2) +
+  geom_line(linewidth = 1.5) +
   geom_ribbon(aes(ymin = lower.CL,
                   ymax = upper.CL),
               alpha = 0.20,
@@ -1366,7 +1393,7 @@ pred <- ggpredict(
            colour = group,
            fill = group,
            linetype = group)) +
-  geom_line(linewidth = 1.2) +
+  geom_line(linewidth = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = .20,
@@ -1378,11 +1405,17 @@ pred <- ggpredict(
   labs(
     x = "Orthographic Sensitivity (OS)",
     y = "Predicted N400 amplitude (µV)",
+    title = expression(
+      beta == 0.143 * "," ~
+      plain(SE) == 0.138 * "," ~
+      italic(t)(4851) == 1.04 * "," ~
+      italic(p) < .3),
     colour = "Complexity",
     fill = "Complexity",
     linetype = "Complexity"
   ) +
   my_theme +
+  theme(plot.title = element_text(hjust = 0.5)) + 
   my_guides)
 
 # Facet by Complexity
@@ -1397,7 +1430,7 @@ pred <- ggpredict(
            colour = group,
            fill = group,
            linetype = group)) +
-  geom_line(linewidth = 1.2) +
+  geom_line(linewidth = 1.5) +
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
               alpha = .20,
@@ -1410,11 +1443,17 @@ pred <- ggpredict(
   labs(
     x = "Orthographic Sensitivity (OS)",
     y = "Predicted N400 amplitude (µV)",
+    title = expression(
+      beta == 0.143 * "," ~
+      plain(SE) == 0.138 * "," ~
+      italic(t)(4851) == 1.04 * "," ~
+      italic(p) < .3),
     colour = "Family Size",
     fill = "Family Size",
     linetype = "Family Size"
   ) +
   my_theme +
+  theme(plot.title = element_text(hjust = 0.5)) + 
   my_guides)
 
 ```
@@ -1423,3 +1462,76 @@ pred <- ggpredict(
 ```{r echo=FALSE, fig.height=3, fig.width=5}
 plot_grid( nw.n400.3way.D, ncol = 1)
 ```
+
+
+Plot Small Family - Large Family difference across OS
+
+```{r include=FALSE}
+
+library(emmeans)
+library(dplyr)
+library(ggplot2)
+
+# Create a sequence of OS values across the observed range
+OS_seq <- with(
+  subset(erp_fs_nw, time_window == "N400"),
+  seq(min(OS, na.rm = TRUE),
+      max(OS, na.rm = TRUE),
+      length.out = 100)
+)
+
+# Estimate family-size means at each OS value, separately by complexity
+emm_family_by_OS_complexity <- emmeans(
+  m_nw_N400_fs_symmetric,
+  ~ family_size | complexity * OS,
+  at = list(OS = OS_seq)
+)
+
+# Build an explicit Small - Large contrast
+fs_levels <- emm_family_by_OS_complexity@levels$family_size
+
+small_large_contrast <- rep(0, length(fs_levels))
+small_large_contrast[fs_levels == "Small"] <-  1
+small_large_contrast[fs_levels == "Large"] <- -1
+
+# Compute Small - Large at each OS value and complexity level
+family_size_diff_by_OS_complexity <- contrast(
+  emm_family_by_OS_complexity,
+  method = list("Small - Large" = small_large_contrast)
+) |>
+  summary(infer = TRUE) |>
+  as.data.frame()
+
+head(family_size_diff_by_OS_complexity)
+
+# Plot graph
+familysize_by_OS <- ggplot(
+  family_size_diff_by_OS_complexity,
+  aes(x = OS,
+      y = estimate,
+      colour = complexity,
+      fill = complexity,
+      linetype = complexity)
+) +
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             linewidth = 0.5) +
+  geom_line(linewidth = 1.5) +
+  geom_ribbon(aes(ymin = lower.CL,
+                  ymax = upper.CL),
+              alpha = 0.20,
+              colour = NA) +
+  scale_colour_manual(values = my_palette_2) +
+  scale_fill_manual(values = my_palette_2) +
+  labs(
+    x = "Lexical Proficiency (OS)",
+    y = "Small - Large family-size difference in predicted N400 amplitude (µV)",
+    colour = "Complexity",
+    fill = "Complexity",
+    linetype = "Complexity"
+  ) +
+  my_theme +
+  my_guides
+
+```
+
