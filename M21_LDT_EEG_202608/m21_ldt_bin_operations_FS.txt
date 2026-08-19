@@ -1,0 +1,3 @@
+b13 = b1 - b2 label Word Small Minus Large Family Size
+b14 = b3 - b4 label Complex NW Small Minus Large Family Size
+b15 = b5 - b6 label Simple NW Small Minus Large Family Size

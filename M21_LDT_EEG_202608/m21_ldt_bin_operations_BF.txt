@@ -1,0 +1,9 @@
+b17 = b9  + b11 label Critical Word High Base Frequency
+b18 = b10 + b12 label Critical Word Low Base Frequency
+b19 = b3  + b13 label NonWord Complex High Base Frequency
+b20 = b4  + b14 label NonWord Complex Low Base Frequency
+b21 = b5  + b15 label NonWord Simple High Base Frequency
+b22 = b6  + b16 label NonWord Simple Low Base Frequency
+b23 = b18 - b17 label Critical Word Low Minus High Base Frequency
+b24 = b20 - b19 label NonWord Complex Low Minus High Base Frequency
+b25 = b22 - b21 label NonWord Simple Low Minus High Base Frequency

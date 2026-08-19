@@ -1,0 +1,736 @@
+---
+title: "M21 2026 July 2026 N400 Component WORDS"
+author: "Joanna Morris"
+date: "`r Sys.Date()`"
+output: 
+  bookdown::pdf_document2:
+    toc: true
+    toc_depth: 4
+    number_sections: true
+header-includes:
+  - \setcounter{secnumdepth}{3}
+editor_options: 
+  chunk_output_type: inline
+---
+
+\scriptsize
+
+# Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      error = FALSE,
+                      comment = "||",
+                      fig.height = 4,
+                      fig.width = 7)
+options(width = 150)
+```
+
+Load libraries
+
+```{r load_libraries, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+library(tidyverse)
+library(ggeffects)
+library(lme4)
+library(afex)
+library(gridExtra)
+library(MuMIn)
+library(pbkrtest)
+library(effectsize)
+library(performance)
+library(cowplot)  # for use with `plot_grid(x,x,ncol = x)` function
+library(e1071) # for use with `skewness()` function
+library(lmerTest)
+library(emmeans)
+# emm_options(lmer.df = "satterthwaite")
+```
+
+## Set emmeans options {-}
+
+```{r emmeans_options, include=FALSE}
+emm_options(
+  lmer.df = "kenward-roger",
+  pbkrtest.limit = 10000,
+  disable.pbkrtest = FALSE
+)
+```
+
+## Set ggplot parameters {-}
+
+```{r ggplot_parameters, include=FALSE}
+# Color palette
+my_palette_1 <- c(
+  "#E31A1C",   # red
+  "#1F78B4"  # blue
+)
+
+my_palette_2 <- c(
+  "#0072B2",  # dark blue
+  "#E69F00"   # orange/gold
+)
+my_linetypes_1 <- c("dashed", "solid")
+
+# Theme
+my_theme <- theme_classic(base_size = 8) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.box = "horizontal"
+  )
+
+# Common guides
+my_guides <- guides(
+  colour = guide_legend(nrow = 1),
+  fill   = guide_legend(nrow = 1)
+)
+
+```
+
+## Define Functions 
+
+### Two-way interaction table function {-}
+
+Function use for Complexity × LP table:
+
+``` 
+emm_complexity_LP_N400 <- emmeans(m_nw_N400_fs, ~ complexity | LP, at = list(LP = c(-1, 0, 1)))
+compact_emm_table(emm_complexity_LP_N400, by_var = LP, condition_prefix = "LP")
+```
+
+for Family Size × LP table:
+
+```
+emm_FS_LP_N400 <- emmeans(m_nw_N400_fs,  ~ family_size | LP, at = list(LP = c(-1, 0, 1)))
+compact_emm_table(emm_FS_LP_N400,  by_var = LP, condition_prefix = "LP")
+```
+
+```{r interaction_table_function.2way, include=FALSE}
+compact_emm_table <- function(emm_object,
+                              by_var,
+                              condition_prefix = NULL,
+                              digits_est = 2,
+                              digits_df = 1,
+                              digits_p = 3) {
+  
+  by_var_name <- rlang::as_name(rlang::ensym(by_var))
+  
+  emm_df <- summary(emm_object) |>
+    as.data.frame()
+  
+  contrast_df <- pairs(emm_object) |>
+    summary() |>
+    as.data.frame()
+  
+  # Focal factor columns are the EMM columns other than the conditioning variable
+  focal_vars <- setdiff(
+    names(emm_df),
+    c(by_var_name, "emmean", "SE", "df", "lower.CL", "upper.CL")
+  )
+  
+  emm_part <- emm_df |>
+    rowwise() |>
+    mutate(
+      Comparison = paste(c_across(all_of(focal_vars)), collapse = " "),
+      Condition = if (is.null(condition_prefix)) {
+        as.character(.data[[by_var_name]])
+      } else {
+        paste(condition_prefix, "=", .data[[by_var_name]])
+      }
+    ) |>
+    ungroup() |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = emmean,
+      SE,
+      df,
+      lower.CL,
+      upper.CL,
+      t.ratio = NA_real_,
+      p.value = NA_real_
+    )
+  
+  contrast_part <- contrast_df |>
+    mutate(
+      Comparison = contrast,
+      Condition = if (is.null(condition_prefix)) {
+        as.character(.data[[by_var_name]])
+      } else {
+        paste(condition_prefix, "=", .data[[by_var_name]])
+      }
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL = NA_real_,
+      upper.CL = NA_real_,
+      t.ratio,
+      p.value
+    )
+  
+  bind_rows(emm_part, contrast_part) |>
+    arrange(Condition, Comparison) |>
+    mutate(
+      Estimate = round(Estimate, digits_est),
+      SE       = round(SE, digits_est),
+      df       = round(df, digits_df),
+      lower.CL = round(lower.CL, digits_est),
+      upper.CL = round(upper.CL, digits_est),
+      t.ratio  = round(t.ratio, digits_est),
+      p.value  = round(p.value, digits_p)
+    )
+}
+```
+
+
+### Three-way interaction table function {-}
+
+```
+emm_3way <- emmeans(m_nw_N400_fs, ~ complexity * family_size | LP, at = list(LP = c(-1, 0, 1)))
+compact_3way_table(emm_3way, by_var = LP, condition_prefix = "LP",  factor1 = complexity,  factor2 = family_size)
+```
+
+```{r interaction_table_function.3way, include=FALSE}
+compact_3way_table <- function(emm_object,
+                               by_var,
+                               condition_prefix = NULL,
+                               factor1,
+                               factor2,
+                               digits_est = 2,
+                               digits_df = 1,
+                               digits_p = 3) {
+  
+  by_var_name <- rlang::as_name(rlang::ensym(by_var))
+  factor1_name <- rlang::as_name(rlang::ensym(factor1))
+  factor2_name <- rlang::as_name(rlang::ensym(factor2))
+  
+  emm_df <- summary(emm_object) |>
+    as.data.frame()
+  
+  make_condition <- function(x) {
+    if (is.null(condition_prefix)) {
+      as.character(x[[by_var_name]])
+    } else {
+      paste(condition_prefix, "=", x[[by_var_name]])
+    }
+  }
+  
+  emm_part <- emm_df |>
+    mutate(
+      Comparison = paste(.data[[factor1_name]], .data[[factor2_name]]),
+      Condition = make_condition(pick(everything()))
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = emmean,
+      SE,
+      df,
+      lower.CL,
+      upper.CL,
+      t.ratio = NA_real_,
+      p.value = NA_real_
+    )
+  
+  factor1_part <- pairs(emm_object, simple = factor1_name) |>
+    summary() |>
+    as.data.frame() |>
+    mutate(
+      Comparison = contrast,
+      Condition = paste(
+        if (is.null(condition_prefix)) .data[[by_var_name]] else paste(condition_prefix, "=", .data[[by_var_name]]),
+        "|",
+        factor2_name, "=",
+        .data[[factor2_name]]
+      )
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL = NA_real_,
+      upper.CL = NA_real_,
+      t.ratio,
+      p.value
+    )
+  
+  factor2_part <- pairs(emm_object, simple = factor2_name) |>
+    summary() |>
+    as.data.frame() |>
+    mutate(
+      Comparison = contrast,
+      Condition = paste(
+        if (is.null(condition_prefix)) .data[[by_var_name]] else paste(condition_prefix, "=", .data[[by_var_name]]),
+        "|",
+        factor1_name, "=",
+        .data[[factor1_name]]
+      )
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL = NA_real_,
+      upper.CL = NA_real_,
+      t.ratio,
+      p.value
+    )
+  
+  interaction_part <- contrast(
+  emm_object,
+  interaction = c("pairwise", "pairwise")
+) |>
+  summary() |>
+  as.data.frame() |>
+  mutate(
+    Comparison = paste0(
+      "Int: ",
+      .data[[paste0(factor1_name, "_pairwise")]],
+      " across ",
+      .data[[paste0(factor2_name, "_pairwise")]]
+    ),
+    Condition = make_condition(cur_data())
+  ) |>
+  transmute(
+    Comparison,
+    Condition,
+    Estimate = estimate,
+    SE,
+    df,
+    lower.CL = NA_real_,
+    upper.CL = NA_real_,
+    t.ratio,
+    p.value
+  )
+  
+  bind_rows(
+    emm_part         |> mutate(RowType = 1),
+    factor1_part     |> mutate(RowType = 2),
+    factor2_part     |> mutate(RowType = 2),
+    interaction_part |> mutate(RowType = 3)
+  ) |>
+    arrange(Condition, RowType, Comparison) |>
+    mutate(
+      Estimate = round(Estimate, digits_est),
+      SE       = round(SE, digits_est),
+      df       = round(df, digits_df),
+      lower.CL = round(lower.CL, digits_est),
+      upper.CL = round(upper.CL, digits_est),
+      t.ratio  = round(t.ratio, digits_est),
+      p.value  = round(p.value, digits_p)
+    ) |>
+    select(-RowType)
+}
+```
+
+
+# Load Files
+
+```{r load_files, message=FALSE, warning=FALSE}
+
+# Load data: rt words
+
+# rt_w <- read_csv("rt_words_frq.csv") |>
+#   filter(correct == 1) |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     Item   = factor(target),
+#     logRT  = log(response_time),
+#     OS     = as.numeric(Dim.2),
+#     LP     = as.numeric(Dim.1),
+#     zLogBF = as.numeric(scale(LogBF)),
+#     zLogFS = as.numeric(scale(LogFS))
+#   )
+
+# Load data: rt nonwords
+
+# rt_nw <- read_csv("rt_nwords_frq.csv") |>
+#   filter(correct == 1) |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     ItemID = factor(ItemID),
+#     complexity = factor(complexity,
+#                     levels = c("SIMP", "COMP"),
+#                     labels = c("Simple", "Complex")),
+#     logRT  = log(response_time),
+#     OS     = as.numeric(Dim.2),
+#     LP     = as.numeric(Dim.1),
+#     zLogBF = as.numeric(scale(LogBF)),
+#     zLogFS = as.numeric(scale(LogFS))
+#   )
+
+# Load data: erp_fs words
+erp_fs_w <- read_csv("erp_fs_dmg_words.csv") |>
+  mutate(
+    SubjID = factor(SubjID),
+    chlabel = factor(chlabel),
+    family_size = factor(family_size, 
+                         levels = c("Small", "Large")),
+    time_window = factor(time_window),
+    OS = as.numeric(Dim.2),
+    LP = as.numeric(Dim.1)
+  )
+
+# Load data: erp_fs nonwords
+# erp_fs_nw <- read_csv("erp_fs_dmg_nonwords.csv") |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     chlabel = factor(chlabel),
+#     family_size = factor(family_size, 
+#                          levels = c("Small", "Large")),
+#     complexity = factor(complexity,
+#                     labels = c("Simple", "Complex")),
+#     time_window = factor(time_window),
+#     OS = as.numeric(Dim.2),
+#     LP = as.numeric(Dim.1)
+#   )
+
+# Load data: erp_bf words
+erp_bf_w <- read_csv("erp_bf_dmg_words.csv") |>
+  mutate(
+    SubjID = factor(SubjID),
+    chlabel = factor(chlabel),
+    base_frequency = factor(base_frequency, 
+                            levels = c("Low", "High")),
+    time_window = factor(time_window),
+    OS = as.numeric(Dim.2),
+    LP = as.numeric(Dim.1)
+  )
+
+# Load data: erp_bf nonwords
+# erp_bf_nw <- read_csv("erp_bf_dmg_nonwords.csv") |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     chlabel = factor(chlabel),
+#     base_frequency = factor(base_frequency, 
+#                             levels = c("Low", "High")),
+#     complexity = factor(complexity,
+#                     labels = c("Simple", "Complex")),
+#     time_window = factor(time_window),
+#     OS = as.numeric(Dim.2),
+#     LP = as.numeric(Dim.1)
+#   )
+```
+
+
+
+```{r}
+range(erp_fs_w$LP)
+range(erp_fs_w$OS)
+```
+
+
+# N400 WORD DATA
+
+## N400 WORD DATA: BASE FREQUENCY 
+
+### Model
+
+
+
+```{r}
+contrasts(erp_bf_w$base_frequency) <- c(-0.5, 0.5)
+
+# Base model: both individual-difference interactions with base frequency
+m_base_bf_n400 <- lmer(
+  value ~ base_frequency * OS +
+    base_frequency * LP +
+    (1 | SubjID) +
+    (1 | SubjID:chlabel),
+  data = subset(erp_bf_w, time_window == "N400"),
+  REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Add OS × LP
+m_2way_bf_n400 <- update(
+  m_base_bf_n400,
+  . ~ . + OS:LP
+)
+
+# Add the three-way interaction
+m_3way_bf_n400 <- update(
+  m_2way_bf_n400,
+  . ~ . + base_frequency:OS:LP
+)
+
+anova(m_base_bf_n400, m_2way_bf_n400, m_3way_bf_n400)
+summary(m_3way_bf_n400)
+```
+
+```{r}
+m_3way_n400 <- lmer(value ~ complexity*OS + complexity*LP + complexity*family_size +
+                             OS*LP*family_size + complexity:OS:LP +
+                             complexity:OS:family_size + complexity:LP:family_size +
+                             (1|SubjID) + (1|SubjID:chlabel),
+                     data = subset(erp_fs_nw, time_window == "N400"),
+                     REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+
+m_4way_n400 <- update(m_3way_n400, . ~ . + complexity:OS:LP:family_size)
+
+anova(m_3way_n400, m_4way_n400)
+```
+
+
+```{r anova_N400_words_bf}
+contrasts(erp_bf_w$base_frequency) <- c(-0.5, 0.5)
+
+m_w_N400_bf <- lmer(
+  value ~ base_frequency * LP  * OS +
+    (1 | SubjID) +
+    (1 | SubjID:chlabel),
+  data = subset(erp_bf_w, time_window == "N400"),
+  control = lmerControl(optimizer = "bobyqa")
+)
+summary(m_w_N400_bf)
+
+# Effect sizes for individual terms
+eta_squared(m_w_N400_bf, partial = TRUE)
+
+# Model R²
+r2_nakagawa(m_w_N400_bf)
+```
+
+### Means and Contrasts
+
+```{r means_N400_words_bf_LP}
+as.tibble(emmeans(m_w_N400_bf, ~ base_frequency)) |> print()
+
+emm_bf_LP <- emmeans(m_w_N400_bf,
+                      ~ base_frequency | LP,
+                      at = list(LP = c(-2.5, -1.5, -1, 0, 1, 1.5, 3)))
+
+emm_part <- summary(emm_bf_LP) |>
+  as.data.frame() |>
+  transmute(LP, Effect = paste("EMM:", base_frequency), Estimate = emmean, SE, df, 
+            lower.CL, upper.CL, t.ratio = NA_real_, p.value = NA_real_)
+
+contrast_part <- pairs(emm_bf_LP) |>
+  summary() |>
+  as.data.frame() |>
+  transmute(LP, Effect = paste("Contrast:", contrast), Estimate = estimate, SE, df,
+            lower.CL = NA_real_, upper.CL = NA_real_, t.ratio, p.value)
+
+emm_contrast_table_LP_N400_words <- bind_rows(emm_part, contrast_part) |>
+  arrange(LP, Effect)|>
+  mutate(
+    Estimate = round(Estimate, 2),
+    SE       = round(SE, 2),
+    df       = round(df, 1),
+    lower.CL = round(lower.CL, 2),
+    upper.CL = round(upper.CL, 2),
+    t.ratio  = round(t.ratio, 2),
+    p.value  = round(p.value, 3)
+  )
+
+as.tibble(emm_contrast_table_LP_N400_words, digits = 3) |> print(n=50)
+```
+
+```{r means_N400_words_bf_OS}
+as.tibble(emmeans(m_w_N400_bf, ~ base_frequency)) |> print()
+
+emm_bf_OS <- emmeans(m_w_N400_bf,
+                      ~ base_frequency | OS,
+                      at = list(OS = c(-1.9, -1.5, -1, 0, 1, 1.5, 1.9)))
+
+emm_part <- summary(emm_bf_OS) |>
+  as.data.frame() |>
+  transmute(OS, Effect = paste("EMM:", base_frequency), Estimate = emmean, SE, df, 
+            lower.CL, upper.CL, t.ratio = NA_real_, p.value = NA_real_)
+
+contrast_part <- pairs(emm_bf_OS) |>
+  summary() |>
+  as.data.frame() |>
+  transmute(OS, Effect = paste("Contrast:", contrast), Estimate = estimate, SE, df,
+            lower.CL = NA_real_, upper.CL = NA_real_, t.ratio, p.value)
+
+emm_contrast_table_OS_N400_words <- bind_rows(emm_part, contrast_part) |>
+  arrange(OS, Effect)|>
+  mutate(
+    Estimate = round(Estimate, 2),
+    SE       = round(SE, 2),
+    df       = round(df, 1),
+    lower.CL = round(lower.CL, 2),
+    upper.CL = round(upper.CL, 2),
+    t.ratio  = round(t.ratio, 2),
+    p.value  = round(p.value, 3)
+  )
+
+as.tibble(emm_contrast_table_OS_N400_words, digits = 3) |> print(n=50)
+```
+
+### Plots
+
+```{r plot_N400_words_bf, include=FALSE}
+
+# Predicted values across the observed range of LP
+
+# pred <- ggpredict(
+#   m_w_N400_bf,
+#   terms = c("LP", "base_frequency")
+# )
+
+(pred_BF_LP <- ggemmeans(
+  m_w_N400_bf,
+  terms = c(
+    "LP [all]",
+    "base_frequency"
+  )
+))
+
+(BFxLP_n400 <- ggplot(pred_BF_LP,
+       aes(x = x,
+           y = predicted,
+           color = group,
+           fill = group,
+           linetype = group)) +
+  geom_line(size = 1.2) +
+  geom_ribbon(aes(ymin = conf.low,
+                  ymax = conf.high),
+              alpha = 0.2,
+              colour = NA) +
+  labs(
+    x = "Language Proficiency (LP)",
+    y = "Predicted N400 amplitude (µV)",
+    color = "Base Frequency",
+    fill = "Base Frequency",
+    linetype = "Base Frequency",
+    title = expression(
+      beta ==  0.344 * "," ~
+      plain(SE) == 0.087 * "," ~
+      italic(t)(1618) == 3.98 * "," ~
+      italic(p) < .001 * "," ~
+      eta[p]^2 == .010),
+  )  +
+  scale_colour_manual(values = my_palette_2) +
+  scale_fill_manual(values = my_palette_2) +
+  scale_linetype_manual(values = my_linetypes_1) +
+  my_theme +
+  my_guides)
+```
+
+## N400 WORD DATA: FAMILY SIZE 
+
+### Model
+
+
+```{r}
+contrasts(erp_fs_w$family_size) <- c(-0.5, 0.5)
+
+# Base model: both individual-difference interactions with family size
+m_base_fs_n400 <- lmer(
+  value ~ family_size * OS +
+    family_size * LP +
+    (1 | SubjID) +
+    (1 | SubjID:chlabel),
+  data = subset(erp_fs_w, time_window == "N400"),
+  REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Add OS × LP
+m_2way_fs_n400 <- update(
+  m_base_fs_n400,
+  . ~ . + OS:LP
+)
+
+# Add the three-way interaction
+m_3way_fs_n400 <- update(
+  m_2way_fs_n400,
+  . ~ . + family_size:OS:LP
+)
+
+anova(m_base_fs_n400, m_2way_fs_n400, m_3way_fs_n400)
+summary(m_3way_fs_n400)
+```
+
+```{r anova_N400_words_fs}
+contrasts(erp_fs_w$family_size) <- c(-0.5, 0.5)
+
+m_w_N400_fs <- lmer(
+  value ~ family_size * OS  * LP + 
+    (1 | SubjID) + 
+    (1 | SubjID:chlabel),
+  data = subset(erp_fs_w, time_window == "N400"),
+  control = lmerControl(optimizer = "bobyqa")
+)
+summary(m_w_N400_fs)
+
+# Effect sizes for individual terms
+eta_squared(m_w_N400_fs, partial = TRUE)
+
+# Model R²
+r2_nakagawa(m_w_N400_fs)
+```
+
+### Means
+
+```{r means_N400_words_fs}
+as.tibble(emmeans(m_w_N400_fs, ~ family_size)) |> print()
+```
+
+emmeans for plotting CIs in plot
+```{r}
+emm_fs_n400_by_lp <- emmeans(m_3way_fs_n400, ~ family_size | LP,
+                              at = list(LP = c(-2.5, -1.5, -1, 0, 1, 1.5, 3)))
+summary(emm_fs_n400_by_lp, infer = c(TRUE, FALSE))
+```
+
+### Plots (Interaction Not significant)
+
+```{r plots_N400_words_fs, include=FALSE}
+# Predicted values across the observed range of LP
+
+# pred <- ggpredict(
+#   m_w_N400_fs,
+#   terms = c("LP", "family_size")
+# )
+
+(pred_FS_LP <- ggemmeans(
+  m_w_N400_fs,
+  terms = c(
+    "LP [all]",
+    "family_size"
+  )
+))
+
+(FSxLP_n400 <- ggplot(pred_FS_LP,
+       aes(x = x,
+           y = predicted,
+           color = group,
+           fill = group,
+           linetype = group)) +
+  geom_line(size = 1.2) +
+  geom_ribbon(aes(ymin = conf.low,
+                  ymax = conf.high),
+              alpha = 0.2,
+              colour = NA) +
+  labs(
+    x = "Language Proficiency (LP)",
+    y = "Predicted N400 amplitude (µV)",
+    title = expression(
+      beta == -0.071 * "," ~
+      plain(SE) == 0.052 * "," ~
+      italic(t)(1618) == -1.37 * "," ~
+      italic(p) < .172),
+    color = "Family Size",
+    fill = "Family Size",
+    linetype = "Family Size"
+  )  +
+  scale_colour_manual(values = my_palette_2) +
+  scale_fill_manual(values = my_palette_2) +
+  scale_linetype_manual(values = my_linetypes_1) +
+  my_theme +
+  my_guides)
+```
+
+

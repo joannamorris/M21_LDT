@@ -10,11 +10,12 @@ output:
 header-includes:
   - \setcounter{secnumdepth}{3}
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 \scriptsize
 
+# Setup {-}
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, 
                       warning = FALSE, 
@@ -26,7 +27,7 @@ knitr::opts_chunk$set(echo = TRUE,
 options(width = 150)
 ```
 
-Load libraries
+## Load libraries {-}
 
 ```{r load_libraries, echo=FALSE, warning=FALSE, message=FALSE}
 library(tidyverse)
@@ -45,7 +46,7 @@ library(emmeans)
 # emm_options(lmer.df = "satterthwaite")
 ```
 
-Set emmeans options
+## Set emmeans options {-}
 
 ```{r emmeans_options}
 emm_options(
@@ -55,7 +56,7 @@ emm_options(
 )
 ```
 
-Set ggplot parameters
+## Set ggplot parameters {-}
 
 ```{r ggplot_parameters}
 # Color palette
@@ -86,7 +87,7 @@ my_guides <- guides(
 
 ```
 
-Define 2-way interaction table function
+## Define  interaction table functions {-}
 
 ```{r interaction_table_function.2way, echo=FALSE}
 compact_emm_table <- function(emm_object,
@@ -306,6 +307,170 @@ compact_3way_table <- function(emm_object,
 }
 ```
 
+```{r interaction_trends_function.3way}
+compact_3way_trends_table <- function(model,
+                                      focal_var,
+                                      moderator_var,
+                                      condition_var,
+                                      moderator_values,
+                                      condition_prefix = NULL,
+                                      digits_est = 2,
+                                      digits_df = 1,
+                                      digits_p = 3,
+                                      lmerTest.limit = NULL) {
+  
+  library(emmeans)
+  library(dplyr)
+  library(rlang)
+
+  focal_name     <- rlang::as_name(rlang::ensym(focal_var))
+  moderator_name <- rlang::as_name(rlang::ensym(moderator_var))
+  condition_name <- rlang::as_name(rlang::ensym(condition_var))
+
+  # Construct emtrends formula:
+  # ~ condition_var | moderator_var
+  trend_formula <- as.formula(
+    paste0("~ ", condition_name, " | ", moderator_name)
+  )
+
+  # Values at which the moderator is evaluated
+  at_list <- setNames(
+    list(moderator_values),
+    moderator_name
+  )
+
+  # ------------------------------------------------------------
+  # Estimate focal-variable slopes at each moderator value
+  # separately for each categorical condition
+  # ------------------------------------------------------------
+
+  if (is.null(lmerTest.limit)) {
+
+    trends <- emtrends(
+      model,
+      specs = trend_formula,
+      var = focal_name,
+      at = at_list
+    )
+
+  } else {
+
+    trends <- emtrends(
+      model,
+      specs = trend_formula,
+      var = focal_name,
+      at = at_list,
+      lmerTest.limit = lmerTest.limit
+    )
+  }
+
+  trend_col <- paste0(focal_name, ".trend")
+
+  # ------------------------------------------------------------
+  # Simple slopes
+  # ------------------------------------------------------------
+
+  slope_part <- summary(
+    trends,
+    infer = c(TRUE, TRUE)
+  ) |>
+    as.data.frame() |>
+    mutate(
+      Comparison = paste0(
+        focal_name,
+        " slope: ",
+        .data[[condition_name]]
+      ),
+
+      Condition = paste0(
+        moderator_name,
+        " = ",
+        .data[[moderator_name]]
+      ),
+
+      Estimate = .data[[trend_col]],
+
+      RowType = 1
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      ModeratorValue = .data[[moderator_name]],
+      Estimate,
+      SE,
+      df,
+      lower.CL,
+      upper.CL,
+      t.ratio,
+      p.value,
+      RowType
+    )
+
+  # ------------------------------------------------------------
+  # Difference between focal-variable slopes across levels
+  # of the categorical factor
+  # ------------------------------------------------------------
+
+  contrast_part <- pairs(trends) |>
+    summary(
+      infer = c(TRUE, TRUE)
+    ) |>
+    as.data.frame() |>
+    mutate(
+      Comparison = paste0(
+        focal_name,
+        " slope difference: ",
+        contrast
+      ),
+
+      Condition = paste0(
+        moderator_name,
+        " = ",
+        .data[[moderator_name]]
+      ),
+
+      RowType = 2
+    ) |>
+    transmute(
+      Comparison,
+      Condition,
+      ModeratorValue = .data[[moderator_name]],
+      Estimate = estimate,
+      SE,
+      df,
+      lower.CL,
+      upper.CL,
+      t.ratio,
+      p.value,
+      RowType
+    )
+
+  # ------------------------------------------------------------
+  # Combine and format
+  # ------------------------------------------------------------
+
+  bind_rows(
+    slope_part,
+    contrast_part
+  ) |>
+    arrange(
+      .data$ModeratorValue,
+      .data$RowType,
+      .data$Comparison
+  ) |>
+    mutate(
+      Estimate = round(Estimate, digits_est),
+      SE       = round(SE, digits_est),
+      df       = round(df, digits_df),
+      lower.CL = round(lower.CL, digits_est),
+      upper.CL = round(upper.CL, digits_est),
+      t.ratio  = round(t.ratio, digits_est),
+      p.value  = round(p.value, digits_p)
+    ) |>
+    select(-RowType, -ModeratorValue)
+}
+```
+
 
 # Load Files
 
@@ -313,45 +478,45 @@ compact_3way_table <- function(emm_object,
 
 # Load data: rt words
 
-rt_w <- read_csv("rt_words_frq.csv") |>
-  filter(correct == 1) |>
-  mutate(
-    SubjID = factor(SubjID),
-    Item   = factor(target),
-    logRT  = log(response_time),
-    OS     = as.numeric(Dim.2),
-    LP     = as.numeric(Dim.1),
-    zLogBF = as.numeric(scale(LogBF)),
-    zLogFS = as.numeric(scale(LogFS))
-  )
+# rt_w <- read_csv("rt_words_frq.csv") |>
+#   filter(correct == 1) |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     Item   = factor(target),
+#     logRT  = log(response_time),
+#     OS     = as.numeric(Dim.2),
+#     LP     = as.numeric(Dim.1),
+#     zLogBF = as.numeric(scale(LogBF)),
+#     zLogFS = as.numeric(scale(LogFS))
+#   )
 
 # Load data: rt nonwords
-rt_nw <- read_csv("rt_nwords_frq.csv") |>
-  filter(correct == 1) |>
-  mutate(
-    SubjID = factor(SubjID),
-    ItemID = factor(ItemID),
-    complexity = factor(complexity,
-                    levels = c("SIMP", "COMP"),
-                    labels = c("Simple", "Complex")),
-    logRT  = log(response_time),
-    OS     = as.numeric(Dim.2),
-    LP     = as.numeric(Dim.1),
-    zLogBF = as.numeric(scale(LogBF)),
-    zLogFS = as.numeric(scale(LogFS))
-  )
+# rt_nw <- read_csv("rt_nwords_frq.csv") |>
+#   filter(correct == 1) |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     ItemID = factor(ItemID),
+#     complexity = factor(complexity,
+#                     levels = c("SIMP", "COMP"),
+#                     labels = c("Simple", "Complex")),
+#     logRT  = log(response_time),
+#     OS     = as.numeric(Dim.2),
+#     LP     = as.numeric(Dim.1),
+#     zLogBF = as.numeric(scale(LogBF)),
+#     zLogFS = as.numeric(scale(LogFS))
+#   )
 
 # Load data: erp_fs words
-erp_fs_w <- read_csv("erp_fs_dmg_words.csv") |>
-  mutate(
-    SubjID = factor(SubjID),
-    chlabel = factor(chlabel),
-    family_size = factor(family_size, 
-                         levels = c("Small", "Large")),
-    time_window = factor(time_window),
-    OS = as.numeric(Dim.2),
-    LP = as.numeric(Dim.1)
-  )
+# erp_fs_w <- read_csv("erp_fs_dmg_words.csv") |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     chlabel = factor(chlabel),
+#     family_size = factor(family_size, 
+#                          levels = c("Small", "Large")),
+#     time_window = factor(time_window),
+#     OS = as.numeric(Dim.2),
+#     LP = as.numeric(Dim.1)
+#   )
 
 # Load data: erp_fs nonwords
 erp_fs_nw <- read_csv("erp_fs_dmg_nonwords.csv") |>
@@ -368,16 +533,16 @@ erp_fs_nw <- read_csv("erp_fs_dmg_nonwords.csv") |>
   )
 
 # Load data: erp_bf words
-erp_bf_w <- read_csv("erp_bf_dmg_words.csv") |>
-  mutate(
-    SubjID = factor(SubjID),
-    chlabel = factor(chlabel),
-    base_frequency = factor(base_frequency, 
-                            levels = c("Low", "High")),
-    time_window = factor(time_window),
-    OS = as.numeric(Dim.2),
-    LP = as.numeric(Dim.1)
-  )
+# erp_bf_w <- read_csv("erp_bf_dmg_words.csv") |>
+#   mutate(
+#     SubjID = factor(SubjID),
+#     chlabel = factor(chlabel),
+#     base_frequency = factor(base_frequency, 
+#                             levels = c("Low", "High")),
+#     time_window = factor(time_window),
+#     OS = as.numeric(Dim.2),
+#     LP = as.numeric(Dim.1)
+#   )
 
 # Load data: erp_bf nonwords
 erp_bf_nw <- read_csv("erp_bf_dmg_nonwords.csv") |>
@@ -395,276 +560,6 @@ erp_bf_nw <- read_csv("erp_bf_dmg_nonwords.csv") |>
 ```
 
 
-# N250 WORD DATA: INTERACTION WITH OS (PRIMARY ANALYSES)
-
-At the N250, both the base frequency and family size models tested the interaction with Orthographic Sensitivity, consistent with the prediction that early form-based processing is selectively modulated by sublexical orthographic knowledge; Language Proficiency was included as a covariate in both models.
-
-
-## N250 WORD DATA: FAMILY SIZE as Fixed Effect
-
-### Model
-
-```{r anova_n250_words_fs}
-contrasts(erp_fs_w$family_size) <- c(-0.5, 0.5)
-
-
-m_w_N250_fs <- lmer(
-  value ~ family_size * OS + LP +
-    (1 | SubjID) +
-    (1 | SubjID:chlabel),
-  data = subset(erp_fs_w, time_window == "N250"),
-  control = lmerControl(optimizer = "bobyqa")
-)
-summary(m_w_N250_fs)
-
-# Effect sizes for individual terms
-eta_squared(m_w_N250_fs, partial = TRUE)
-
-# Model R²
-r2_nakagawa(m_w_N250_fs)
-```
-
-#### Means and Contrasts
-
-```{r means_n250_words_fs}
-# family size
-as.tibble(emmeans(m_w_N250_fs, ~ family_size)) |> print()
-
-emm_fs_OS <- emmeans(m_w_N250_fs,
-                      ~ family_size | OS,
-                      at = list(OS = c(-1.9, -1, 0, 1, 1.9)),
-                     lmerTest.limit = 6480)
-
-emm_part <- summary(emm_fs_OS) |>
-  as.data.frame() |>
-  transmute(OS, Effect = paste("EMM:", family_size), Estimate = emmean, SE, df, 
-            lower.CL, upper.CL, t.ratio = NA_real_, p.value = NA_real_)
-
-contrast_part <- pairs(emm_fs_OS) |>
-  summary() |>
-  as.data.frame() |>
-  transmute(OS,Effect = paste("Contrast:", contrast), Estimate = estimate, SE, df,
-            lower.CL = NA_real_, upper.CL = NA_real_, t.ratio, p.value)
-
-emm_contrast_table <- bind_rows(emm_part, contrast_part) |>
-  arrange(OS, Effect)|>
-  mutate(
-    Estimate = round(Estimate, 2),
-    SE       = round(SE, 2),
-    df       = round(df, 1),
-    lower.CL = round(lower.CL, 2),
-    upper.CL = round(upper.CL, 2),
-    t.ratio  = round(t.ratio, 2),
-    p.value  = round(p.value, 3)
-  )
-
-as.tibble(emm_contrast_table, digits = 3) |> print(n = 20)
-```
-
-#### Plots
-
-```{r echo=FALSE, plots_n250_words_fs, include=FALSE }
-library(ggeffects)
-library(ggplot2)
-
-# Predicted values across the observed range of OS
-# pred <- ggpredict(
-#   m_w_N250_fs,
-#   terms = c("OS", "family_size")
-# )
-
-(pred_FS_OS <- ggemmeans(
-  m_w_N250_fs,
-  terms = c(
-    "OS [all]",
-    "family_size"
-  )))
-
-(FSxOS_n250 <- ggplot(pred_FS_OS,
-       aes(x = x,
-           y = predicted,
-           color = group,
-           fill = group,
-           linetype = group)) +
-  geom_line(size = 1.5) +
-  geom_ribbon(aes(ymin = conf.low,
-                  ymax = conf.high),
-              alpha = 0.2,
-              colour = NA,
-              linetype = 0) +
-  labs(
-    x = "Orthographic Sensitivity (OS)",
-    y = "Predicted N250 amplitude (µV)",
-    title = expression(
-      beta == -0.111 * "," ~
-      plain(SE) == 0.065 * "," ~
-      italic(t)(1618) == -1.70 * "," ~
-      italic(p) < .089),
-    color = "Family Size",
-    fill = "Family Size",
-    linetype = "Family Size") +
-  scale_colour_manual(values = my_palette_2) +
-  scale_fill_manual(values = my_palette_2) +
-  scale_linetype_manual(values = my_linetypes_1) +
-  my_theme +
-  my_guides)
-
-```
-
-## N250 WORD DATA: BASE FREQUENCY as Fixed Effect
-
-### Model
-
-```{r anova_n250_words_bf}
-contrasts(erp_bf_w$base_frequency) <- c(-0.5, 0.5)
-
-
-m_w_N250_bf <- lmer(
-  value ~ base_frequency * OS + LP +
-    (1 | SubjID) +
-    (1 | SubjID:chlabel),
-  data = subset(erp_bf_w, time_window == "N250"),
-  control = lmerControl(optimizer = "bobyqa")
-)
-summary(m_w_N250_bf)
-
-# Effect sizes for individual terms
-eta_squared(m_w_N250_bf, partial = TRUE)
-
-# Model R²
-r2_nakagawa(m_w_N250_bf)
-```
-
-#### Means and contrasts
-
-```{r means_n250_words_bf}
-as.tibble(emmeans(m_w_N250_bf, ~ base_frequency)) |> print()
-
-emm_bf_OS <- emmeans(m_w_N250_bf,
-                      ~ base_frequency | OS,
-                      at = list(OS = c(-1.9, -1, 0, 1, 1.9)),
-                     lmerTest.limit = 6480)
-
-emm_part <- summary(emm_bf_OS) |>
-  as.data.frame() |>
-  transmute(OS, Effect = paste("EMM:", base_frequency), Estimate = emmean, SE, df, 
-            lower.CL, upper.CL, t.ratio = NA_real_, p.value = NA_real_)
-
-contrast_part <- pairs(emm_bf_OS) |>
-  summary() |>
-  as.data.frame() |>
-  transmute(OS,Effect = paste("Contrast:", contrast), Estimate = estimate, SE, df,
-            lower.CL = NA_real_, upper.CL = NA_real_, t.ratio, p.value)
-
-emm_contrast_table <- bind_rows(emm_part, contrast_part) |>
-  arrange(OS, Effect)|>
-  mutate(
-    Estimate = round(Estimate, 2),
-    SE       = round(SE, 2),
-    df       = round(df, 1),
-    lower.CL = round(lower.CL, 2),
-    upper.CL = round(upper.CL, 2),
-    t.ratio  = round(t.ratio, 2),
-    p.value  = round(p.value, 3)
-  )
-
-as.tibble(emm_contrast_table, digits = 3) |> print(n = 20)
-```
-#### Plots
-
-```{r echo=FALSE, plots_n250_words_bf, include=FALSE}
-library(ggeffects)
-library(ggplot2)
-
-# Predicted values across the observed range of OS
-# pred <- ggpredict(
-#   m_w_N250_bf,
-#   terms = c("OS", "base_frequency")
-# )
-
-(pred_BF_OS <- ggemmeans(
-  m_w_N250_bf,
-  terms = c(
-    "OS [all]",
-    "base_frequency"
-  )))
-
-(BFxOS_n250 <- ggplot(pred_BF_OS,
-       aes(x = x,
-           y = predicted,
-           color = group,
-           fill = group,
-           linetype = group)) +
-  geom_line(size = 1.5) +
-  geom_ribbon(aes(ymin = conf.low,
-                  ymax = conf.high),
-              alpha = 0.2,
-              colour = NA) +
-  labs(
-    x = "Orthographic Sensitivity (OS)",
-    y = "Predicted N250 amplitude (µV)",
-    title = expression(
-      beta == -0.455 * "," ~
-      plain(SE) == 0.112 * "," ~
-      italic(t)(1618) == -4.06 * "," ~
-      italic(p) < .001 * "," ~
-      eta[p]^2 == .010),
-    color = "Base Frequency",
-    fill = "Base Frequency",
-    linetype = "Base Frequency"
-  ) +
-  scale_colour_manual(values = my_palette_2) +
-  scale_fill_manual(values = my_palette_2) +
-  scale_linetype_manual(values = my_linetypes_1) +
-  my_theme +
-  my_guides)
-
-```
-
-
-## N250 WORD DATA: Combined Plots
-
-
-
-
-```{r echo=FALSE, fig.height=3, fig.width=5}
-row1 <- plot_grid(BFxOS_n250,FSxOS_n250,ncol = 2)
-
-plot_grid(
-  ggdraw() + draw_label("N250 Word Data", fontface = "bold"),
-  row1,
-  ncol = 1,
-  rel_heights = c(0.08, 1)
-)
-```
-
-## N250 WORD DATA: INTERACTION WITH LP (EXPLORATORY ANALYSES)
-
-```{r}
-# BINNED BY BASE FREQUENCY
-m_w_N250_bf_LP <- lmer(
-  value ~ base_frequency * LP + OS +
-    (1 | SubjID) + (1 | SubjID:chlabel),
-  data = subset(erp_bf_w, time_window == "N250"),
-  control = lmerControl(optimizer = "bobyqa")
-)
-summary(m_w_N250_bf_LP)
-```
-
-```{r}
-# BINNED BY FAMILY SIZE
-
-m_w_N250_fs_LP <- lmer(
-  value ~ family_size * LP + OS +
-    (1 | SubjID) + (1 | SubjID:chlabel),
-  data = subset(erp_fs_w, time_window == "N250"),
-  control = lmerControl(optimizer = "bobyqa")
-)
-summary(m_w_N250_fs_LP)
-```
-
-
-\newpage
 
 # NON-WORD DATA 
 
@@ -675,38 +570,79 @@ range(erp_fs_nw$OS)
 
 ## N250 NONWORD DATA: 
 
-For the NonWord data, BASE FREQUENCY and FAMILY SIZE are both COVARIATES. Because they are correlated only one needs to be included. Family Size is included as covariate, not fixed effect, becauses it explains more variance.
+### Model FAMILY SIZE
 
-### Model
+```{r anova_n250_nonwords_fs_comparisons}
+contrasts(erp_fs_nw$complexity)  <- c(-0.5, 0.5)
+contrasts(erp_fs_nw$family_size) <- c(-0.5, 0.5)
 
-```{r anova_n250_nonwords_fs}
-contrasts(erp_fs_nw$complexity)   <- c(-0.5, 0.5)
-contrasts(erp_fs_nw$family_size)  <- c(-0.5, 0.5)
+# Base model: current confirmed N250 structure, family_size now fully crossed rather than covariate-only
+m_base_nw_n250 <- lmer(
+  value ~ complexity * OS + complexity * LP + complexity * family_size +
+    (1 | SubjID) + (1 | SubjID:chlabel),
+  data = subset(erp_fs_nw, time_window == "N250"),
+  REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
 
-m_nw_N250_fs <- lmer(
-  value ~ complexity * OS + complexity * LP + family_size +
-    (1 | SubjID) +
-    (1 | SubjID:chlabel),
+# Add all remaining two-way and three-way terms needed to reach the full four-way
+m_full_nw_n250 <- lmer(
+  value ~ complexity * OS * LP * family_size +
+    (1 | SubjID) + (1 | SubjID:chlabel),
+  data = subset(erp_fs_nw, time_window == "N250"),
+  REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+anova(m_base_nw_n250, m_full_nw_n250)
+summary(m_full_nw_n250)
+```
+
+```{r}
+m_3way <- lmer(value ~ complexity*OS + complexity*LP + complexity*family_size +
+                        OS*LP*family_size + complexity:OS:LP +
+                        complexity:OS:family_size + complexity:LP:family_size +
+                        (1|SubjID) + (1|SubjID:chlabel),
+                data = subset(erp_fs_nw, time_window == "N250"),
+                REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+
+m_4way <- update(m_3way, . ~ . + complexity:OS:LP:family_size)
+
+anova(m_3way, m_4way)
+```
+
+
+```{r}
+contrasts(erp_fs_nw$complexity)  <- c(-0.5, 0.5)
+contrasts(erp_fs_nw$family_size) <- c(-0.5, 0.5)
+
+# N250: theoretically-motivated confirmatory model per the agreed principle
+# complexity crossed with each of OS, LP, family_size (affix-led/stem-led + processing cost tests)
+# OS, LP, family_size fully crossed with each other (parallel individual-difference dimensions)
+# No complexity four-way (already ruled out)
+m_confirm_nw_n250 <- lmer(
+  value ~ complexity * OS + complexity * LP + complexity * family_size +
+    OS * LP * family_size +
+    (1 | SubjID) + (1 | SubjID:chlabel),
   data = subset(erp_fs_nw, time_window == "N250"),
   control = lmerControl(optimizer = "bobyqa")
 )
-summary(m_nw_N250_fs)
+summary(m_confirm_nw_n250)
 
-# Effect sizes for individual terms
-eta_squared(m_nw_N250_fs, partial = TRUE)
+# Effect Sizes
+eta_squared(m_confirm_nw_n250, partial = TRUE)
 
-# Model R²
-r2_nakagawa(m_nw_N250_fs)
+# R-squared
+r2_nakagawa(m_confirm_nw_n250)
 ```
-
 ### Means and Contrasts
 
 ```{r means_n250_nonwords_fs}
 ## complexity
-as.tibble(emmeans(m_nw_N250_fs, ~ complexity))
+as.tibble(emmeans(m_confirm_nw_n250, ~ complexity))
 
 ## complexity x LP
-emm_fs_LP <- emmeans(m_nw_N250_fs,
+emm_fs_LP <- emmeans(m_confirm_nw_n250,
                       ~ complexity | LP,
                       at = list(LP = c(-2.5, -1, 0, 1, 3.0)))
 
@@ -736,7 +672,7 @@ emm_contrast_table_fs_LP <- bind_rows(emm_part, contrast_part) |>
 as_tibble(emm_contrast_table_fs_LP) |> print(n = 50)
 
 ## complexity x OS
-emm_fs_OS <- emmeans(m_nw_N250_fs,
+emm_fs_OS <- emmeans(m_confirm_nw_n250,
                       ~ complexity | OS,
                       at = list(OS = c(-1.9, -1, 0, 1, 1.9)))
 
@@ -765,6 +701,40 @@ emm_contrast_table_fs_OS <- bind_rows(emm_part, contrast_part) |>
 # Force RStudio to show more rows inline by using as.tibble()
 as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
 ```
+
+#### Three-way Interaction
+
+```{r}
+# To examine LP slopes across selected OS values:
+LP_3way_trends_fs_n250 <- compact_3way_trends_table(
+  model = m_confirm_nw_n250,
+  focal_var = LP,
+  moderator_var = OS,
+  condition_var = family_size,
+  moderator_values = c(-1.9, -1.5, -1, 0, 1, 1.5, 1.9),
+  condition_prefix = "FS",
+  lmerTest.limit = 6480
+)
+
+as.tibble(LP_3way_trends_fs_n250) |>
+  print(n = 50)
+
+# To examine OS slopes across selected LP values:
+
+OS_3way_trends_fs_n250 <- compact_3way_trends_table(
+  model = m_confirm_nw_n250,
+  focal_var = OS,
+  moderator_var = LP,
+  condition_var = family_size,
+  moderator_values = c(-2.5, -1.5, -1, 0, 1, 1.5, 3),
+  condition_prefix = "FS",
+  lmerTest.limit = 6480
+)
+
+as.tibble(OS_3way_trends_fs_n250) |>
+  print(n = 50)
+```
+
 ### Plots
 
 ```{r plots_n250_nonwords_fs, include = FALSE}
@@ -775,7 +745,7 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
 # )
 
 (pred_CMP_OS <- ggemmeans(
-  m_nw_N250_fs,
+  m_confirm_nw_n250,
   terms = c(
     "OS [all]",
     "complexity"
@@ -818,7 +788,7 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
 # )
 
 (pred_CMP_LP <- ggemmeans(
-  m_nw_N250_fs,
+  m_confirm_nw_n250,
   terms = c(
     "LP [all]",
     "complexity"
@@ -855,7 +825,7 @@ as_tibble(emm_contrast_table_fs_OS) |> print(n = 50)
   my_guides)
 ```
 
-## N250 NONWORD DATA: OS and LP Interaction Plots
+ N250 NONWORD DATA: OS and LP Interaction Plots
 
 ```{r echo=FALSE, fig.width=5, fig.height=3}
 row1 <- plot_grid( CMP.OS.fs.n250.nw, CMP.LP.fs.n250.nw, ncol = 2)
@@ -867,4 +837,50 @@ plot_grid(
   rel_heights = c(0.08, 1)
 )
 ```
+
+
+
+```{r}
+# Identify extreme LP participant(s) in the nonword dataset
+extreme_ids_nw <- erp_fs_nw |>
+  distinct(SubjID, LP) |>
+  filter(LP > 2) |>
+  pull(SubjID)
+
+extreme_ids_nw  # confirm this is S153 again
+
+# Robustness check: N250
+m_confirm_nw_n250_robust <- update(
+  m_confirm_nw_n250,
+  data = subset(erp_fs_nw, time_window == "N250" & !SubjID %in% extreme_ids_nw)
+)
+summary(m_confirm_nw_n250_robust)
+```
+
+### Model BASE FREQUENCY
+
+```{r}
+contrasts(erp_bf_nw$complexity)      <- c(-0.5, 0.5)
+contrasts(erp_bf_nw$base_frequency)  <- c(-0.5, 0.5)
+
+# N250 nonwords: specificity check for base frequency, matching the family_size
+# confirmatory structure so it's a fair parallel test
+m_confirm_nw_n250_bf <- lmer(
+  value ~ complexity * OS + complexity * LP + complexity * base_frequency +
+    OS * LP * base_frequency +
+    (1 | SubjID) + (1 | SubjID:chlabel),
+  data = subset(erp_bf_nw, time_window == "N250"),
+  control = lmerControl(optimizer = "bobyqa")
+)
+summary(m_confirm_nw_n250_bf)
+
+# Effect Sizes
+eta_squared(m_confirm_nw_n250_bf, partial = TRUE)
+
+# R-squared
+r2_nakagawa(m_confirm_nw_n250_bf)
+
+```
+
+
 
